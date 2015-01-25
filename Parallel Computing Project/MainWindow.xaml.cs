@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -24,11 +27,34 @@ namespace Parallel_Computing_Project
    {
       private FolderBrowserDialog folderBrowseDialog;
 
+      private ObservableCollection<string> searchResultList;
+
+      private object listLock = new object();     
+
+      private Stopwatch runWatch;
+      private Stopwatch startWatch;
+
+      public ViewModel ViewModel;
+
       public MainWindow()
       {
          InitializeComponent();
 
+         this.ViewModel = new ViewModel();
+         this.ViewModel.ResultTime = "";
+         this.ViewModel.SearchDirectory = @"C:\Users\Sebastian\SolarCar\workspace\RoadsignRacer Desktop Old";
+         this.ViewModel.SearchText = "cache";
+
+         this.windowMain.DataContext = this.ViewModel;
+
+         this.comboBoxSearchType.ItemsSource = Enum.GetValues(typeof(SearchType));
+
          this.folderBrowseDialog = new FolderBrowserDialog();
+         this.searchResultList = new ObservableCollection<string>();
+
+         BindingOperations.EnableCollectionSynchronization(this.searchResultList, this.listLock);
+
+         this.listBoxSearchResults.ItemsSource = this.searchResultList;
       }
 
       private void buttonBrowse_Click(object sender, RoutedEventArgs e)
@@ -41,11 +67,105 @@ namespace Parallel_Computing_Project
          }
       }
 
-      private void buttonStartSearch_Click(object sender, RoutedEventArgs e)
+      private async void buttonStartSearch_Click(object sender, RoutedEventArgs e)
       {
-         this.listBoxSearchResults.ItemsSource = null;
+         this.ViewModel.ResultTime = "";
+         this.searchResultList.Clear();
 
-         List<string> files = this.GetFilesInDirectory(this.textBoxDirectory.Text);
+         SearchType searchType = (SearchType)Enum.Parse(typeof(SearchType), this.comboBoxSearchType.SelectedItem.ToString(), true);
+
+         startWatch = Stopwatch.StartNew();
+         this.runWatch = Stopwatch.StartNew();
+
+         switch (searchType)
+         {
+            case SearchType.Synchron:
+               this.ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
+               break;
+            case SearchType.Thread:
+               ExecuteThreadSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
+               break;
+            case SearchType.Task:
+               ExecuteTaskSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
+               break;
+            case SearchType.ParallelLoop:
+               ExecuteParallelForSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
+               break;
+            case SearchType.AsyncAwait:
+               await Task.Factory.StartNew(() => ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText));
+               break;
+            case SearchType.PLinq:
+               await ExecutePLinqForSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
+               break;
+            default:
+               break;
+         }
+
+         startWatch.Stop();
+      }
+
+      private void ExecuteThreadSearch(string directory, string text)
+      {
+         new Thread(() => this.ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText)).Start();
+      }
+      
+      private void ShowTimes()
+      {
+         this.ViewModel.ResultTime = "Start Time: " + this.startWatch.ElapsedMilliseconds + " ms"
+            + " Run Time: " + this.runWatch.ElapsedMilliseconds + " ms";        
+      }
+
+      private void ExecuteTaskSearch(string directory, string text)
+      {
+         Task.Factory.StartNew(() => ExecuteSynchSearch(directory, text));
+      }
+
+      private async Task ExecutePLinqForSearch(string directory, string text)
+      {
+         await Task.Factory.StartNew(() => 
+         {
+            IEnumerable<string> files = Directory.EnumerateFiles(directory, "*.*", SearchOption.AllDirectories);
+
+            var fileResults = from file in files.AsParallel()
+                              where File.ReadAllText(file).Contains(text)
+                              select file;
+
+            foreach (var file in fileResults)
+            {
+               this.searchResultList.Add(file);
+            }
+
+            this.runWatch.Stop();
+
+            this.ShowTimes();
+         });        
+      }
+
+      private async void ExecuteParallelForSearch(string directory, string text)
+      {
+         await Task.Factory.StartNew(() =>
+         {
+            string[] files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
+
+            Parallel.ForEach(files, currentFile =>
+            {
+               string fileContent = File.ReadAllText(currentFile);
+
+               if (fileContent.Contains(text))
+               {
+                  this.searchResultList.Add(currentFile);
+               }
+            });
+         });        
+
+         this.runWatch.Stop();
+
+         this.ShowTimes();
+      }
+
+      private void ExecuteSynchSearch(string directory, string text)
+      {
+         string[] files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
 
          List<string> foundFiles = new List<string>();
 
@@ -53,27 +173,15 @@ namespace Parallel_Computing_Project
          {
             string fileContent = File.ReadAllText(file);
 
-            if (fileContent.Contains(this.textBoxSearchText.Text))
+            if (fileContent.Contains(text))
             {
-               foundFiles.Add(file);
+               this.searchResultList.Add(file);
             }
          }
 
-         this.listBoxSearchResults.ItemsSource = files;
-      }
- 
-      private List<string> GetFilesInDirectory(string directory)
-      {
-         List<string> filesCurrentDirectory = new List<string>();
+         this.runWatch.Stop();
 
-         filesCurrentDirectory.AddRange(Directory.GetFiles(directory));
-
-         foreach (string directoryPath in Directory.GetDirectories(directory))
-         {
-            filesCurrentDirectory.AddRange(GetFilesInDirectory(directoryPath));
-         }
-
-         return filesCurrentDirectory;
+         this.ShowTimes();
       }
    }
 }
