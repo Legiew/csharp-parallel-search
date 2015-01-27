@@ -1,6 +1,7 @@
 ﻿using Catel.Data;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ namespace Parallel_Computing_Project
       private string searchText;
       private string searchDirectory;
       private string resultTime;
+      private ObservableCollection<string> searchResultList;
 
       public string SearchText
       {
@@ -49,6 +51,19 @@ namespace Parallel_Computing_Project
             var oldValue = resultTime;
             resultTime = value;
             RaisePropertyChanged(() => ResultTime, oldValue, value);
+         }
+      }
+
+      public ObservableCollection<string> SearchResultList
+      {
+         get { return searchResultList; }
+         set
+         {
+            RaisePropertyChanging(() => SearchResultList);
+
+            var oldValue = searchResultList;
+            searchResultList = value;
+            RaisePropertyChanged(() => SearchResultList, oldValue, value);
          }
       }
    }

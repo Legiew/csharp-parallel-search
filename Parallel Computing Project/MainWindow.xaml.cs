@@ -27,9 +27,7 @@ namespace Parallel_Computing_Project
    {
       private FolderBrowserDialog folderBrowseDialog;
 
-      private ObservableCollection<string> searchResultList;
-
-      private object listLock = new object();     
+      private object listLock = new object();
 
       private Stopwatch runWatch;
       private Stopwatch startWatch;
@@ -44,17 +42,16 @@ namespace Parallel_Computing_Project
          this.ViewModel.ResultTime = "";
          this.ViewModel.SearchDirectory = @"C:\Users\Sebastian\SolarCar\workspace\RoadsignRacer Desktop Old";
          this.ViewModel.SearchText = "cache";
+         this.ViewModel.SearchResultList = new ObservableCollection<string>();
 
          this.windowMain.DataContext = this.ViewModel;
 
          this.comboBoxSearchType.ItemsSource = Enum.GetValues(typeof(SearchType));
 
          this.folderBrowseDialog = new FolderBrowserDialog();
-         this.searchResultList = new ObservableCollection<string>();
+         this.ViewModel.SearchResultList = new ObservableCollection<string>();
 
-         BindingOperations.EnableCollectionSynchronization(this.searchResultList, this.listLock);
-
-         this.listBoxSearchResults.ItemsSource = this.searchResultList;
+         BindingOperations.EnableCollectionSynchronization(this.ViewModel.SearchResultList, this.listLock);
       }
 
       private void buttonBrowse_Click(object sender, RoutedEventArgs e)
@@ -63,14 +60,14 @@ namespace Parallel_Computing_Project
 
          if (result == System.Windows.Forms.DialogResult.OK)
          {
-            this.textBoxDirectory.Text = this.folderBrowseDialog.SelectedPath;
+            this.ViewModel.SearchDirectory = this.folderBrowseDialog.SelectedPath;
          }
       }
 
-      private async void buttonStartSearch_Click(object sender, RoutedEventArgs e)
+      private void buttonStartSearch_Click(object sender, RoutedEventArgs e)
       {
          this.ViewModel.ResultTime = "";
-         this.searchResultList.Clear();
+         this.ViewModel.SearchResultList.Clear();
 
          SearchType searchType = (SearchType)Enum.Parse(typeof(SearchType), this.comboBoxSearchType.SelectedItem.ToString(), true);
 
@@ -92,10 +89,10 @@ namespace Parallel_Computing_Project
                ExecuteParallelForSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
                break;
             case SearchType.AsyncAwait:
-               await Task.Factory.StartNew(() => ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText));
+               Task.Factory.StartNew(() => ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText));
                break;
             case SearchType.PLinq:
-               await ExecutePLinqForSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
+               ExecutePLinqForSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
                break;
             default:
                break;
@@ -108,11 +105,11 @@ namespace Parallel_Computing_Project
       {
          new Thread(() => this.ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText)).Start();
       }
-      
+
       private void ShowTimes()
       {
          this.ViewModel.ResultTime = "Start Time: " + this.startWatch.ElapsedMilliseconds + " ms"
-            + " Run Time: " + this.runWatch.ElapsedMilliseconds + " ms";        
+            + " Run Time: " + this.runWatch.ElapsedMilliseconds + " ms";
       }
 
       private void ExecuteTaskSearch(string directory, string text)
@@ -120,43 +117,37 @@ namespace Parallel_Computing_Project
          Task.Factory.StartNew(() => ExecuteSynchSearch(directory, text));
       }
 
-      private async Task ExecutePLinqForSearch(string directory, string text)
+      private void ExecutePLinqForSearch(string directory, string text)
       {
-         await Task.Factory.StartNew(() => 
+         IEnumerable<string> files = Directory.EnumerateFiles(directory, "*.*", SearchOption.AllDirectories);
+
+         var fileResults = from file in files.AsParallel()
+                           where File.ReadAllText(file).Contains(text)
+                           select file;
+
+         foreach (var file in fileResults)
          {
-            IEnumerable<string> files = Directory.EnumerateFiles(directory, "*.*", SearchOption.AllDirectories);
+            this.ViewModel.SearchResultList.Insert(0, file);
+         }
 
-            var fileResults = from file in files.AsParallel()
-                              where File.ReadAllText(file).Contains(text)
-                              select file;
+         this.runWatch.Stop();
 
-            foreach (var file in fileResults)
-            {
-               this.searchResultList.Add(file);
-            }
-
-            this.runWatch.Stop();
-
-            this.ShowTimes();
-         });        
+         this.ShowTimes();
       }
 
-      private async void ExecuteParallelForSearch(string directory, string text)
+      private void ExecuteParallelForSearch(string directory, string text)
       {
-         await Task.Factory.StartNew(() =>
+         string[] files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
+
+         Parallel.ForEach(files, currentFile =>
          {
-            string[] files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
+            string fileContent = File.ReadAllText(currentFile);
 
-            Parallel.ForEach(files, currentFile =>
+            if (fileContent.Contains(text))
             {
-               string fileContent = File.ReadAllText(currentFile);
-
-               if (fileContent.Contains(text))
-               {
-                  this.searchResultList.Add(currentFile);
-               }
-            });
-         });        
+               this.ViewModel.SearchResultList.Insert(0, currentFile);
+            }
+         });
 
          this.runWatch.Stop();
 
@@ -175,7 +166,7 @@ namespace Parallel_Computing_Project
 
             if (fileContent.Contains(text))
             {
-               this.searchResultList.Add(file);
+               this.ViewModel.SearchResultList.Insert(0, file);
             }
          }
 
