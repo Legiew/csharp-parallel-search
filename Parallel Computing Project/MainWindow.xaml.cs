@@ -82,7 +82,7 @@ namespace Parallel_Computing_Project
                ExecuteParallelForSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
                break;
             case SearchType.AsyncAwait:
-               Task.Factory.StartNew(() => ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText));
+               ExecuteAsyncWait(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
                break;
             case SearchType.PLinq:
                ExecutePLinqForSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText);
@@ -146,6 +146,11 @@ namespace Parallel_Computing_Project
 
          this.ShowTimes();
       }
+
+      private void ExecuteAsyncWait(string directory, string text)
+      {
+          Task.Factory.StartNew(() => ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText));
+      }  
 
       private void ExecuteSynchSearch(string directory, string text)
       {
