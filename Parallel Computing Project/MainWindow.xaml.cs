@@ -149,8 +149,13 @@ namespace Parallel_Computing_Project
 
       private void ExecuteAsyncWait(string directory, string text)
       {
-          Task.Factory.StartNew(() => ExecuteSynchSearch(this.ViewModel.SearchDirectory, this.ViewModel.SearchText));
-      }  
+          Executer(directory, text);
+      }
+
+      async Task Executer(string directory, string text)
+      {
+          ExecuteSynchSearch(directory, text);
+      }
 
       private void ExecuteSynchSearch(string directory, string text)
       {
